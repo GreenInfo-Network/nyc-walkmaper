@@ -1,9 +1,11 @@
 // CARTO DB info
 // see also https://chekpeds.carto.com/tables/walkmapper_obstructions
 const CARTO_USERNAME = 'chekpeds';
-const CARTO_VIZ_ID = 'a71e66b8-cb4b-4c0a-aee7-3ef79a3f4b1a';
-const CARTO_VIZJSON_URL = `https://${CARTO_USERNAME}.carto.com/api/v2/viz/${CARTO_VIZ_ID}/viz.json`;
-const CARTO_DB_TABLE = 'walkmapper_obstructions';
+const CARTO_OBSTRUCTIONS_TABLE = 'walkmapper_obstructions';
+const CARTO_SQL_URL = `https://${CARTO_USERNAME}.carto.com/api/v2/sql`;
+const CARTO_QUERY_METERS = 50;
+const OBSTRUCTION_IMAGE_BASEURL = 'http://walkmapper.sunnysiderecords.com/uploads/';
+const OBSTRUCTION_IMAGE_THUMB_SIZE = 85;
 
 // Socrata API for 311, the URL and filters
 const SOCRATA311_URL = 'https://data.cityofnewyork.us/resource/erm2-nwe9.json';
@@ -46,7 +48,7 @@ const SOCRATA311_COMPLAINTYPES = [
     'Bike Rack Complaint',
     'City Vehicle Complaint',
 ];
-const SOCRATA_QUERY_METERS = 250; // GDA
+const SOCRATA311_QUERY_METERS = 50;
 
 // the L.Map and some settings
 let MAP;
@@ -80,54 +82,62 @@ const MAP_BASEMAPS = [
 
 $(document).ready(function () {
     initMap();
-    initThreeOneOneMarkerLegendHack();
-
-    setTimeout(function () {
-        initLoadInitialState();
-    }, 1 * 1000);
+    initLoadUrlParamsAndStart();
 });
 
 
-function initLoadInitialState () {
+function initLoadUrlParamsAndStart () {
     const params = new URLSearchParams(window.location.search);
 
-    const complaintid = params.get('id');
+    const obstructionid = params.get('id');
     const latlng = params.get('latlng') ? params.get('latlng').match(/^([\d\.\-]+),([\d\.\-]+)$/) : null;
     const lnglat = params.get('lnglat') ? params.get('lnglat').match(/^([\d\.\-]+),([\d\.\-]+)$/) : null;
 
-    if (complaintid) {
-        zoomToObstructionPoint(complaintid);
-        loadThreeOneOneComplaintsByObstructionPoint(complaintid);
-    }
-    else if (latlng) {
+    if (latlng) {
         const lat = parseFloat(latlng[1]);
         const lng = parseFloat(latlng[2]);
-        zoomToLatLng(lat, lng);
-        loadThreeOneOneComplaintsByLatLng(lat, lng, SOCRATA_QUERY_METERS);
+        initGetStarted(lat, lng, undefined);
     }
     else if (lnglat) {
         const lat = parseFloat(lnglat[2]);
         const lng = parseFloat(lnglat[1]);
-        zoomToLatLng(lat, lng);
-        loadThreeOneOneComplaintsByLatLng(lat, lng, SOCRATA_QUERY_METERS);
+        initGetStarted(lat, lng, undefined);
+    }
+    else if (obstructionid) {
+        const sql = `SELECT ST_X(the_geom) AS lng, ST_Y(the_geom) AS lat FROM ${CARTO_OBSTRUCTIONS_TABLE} WHERE id=${obstructionid}`;
+        const params = {
+            q: sql,
+        };
+
+        $.getJSON(CARTO_SQL_URL, params, function (data) {
+            const point = data.rows[0];
+            if (point) initGetStarted(point.lat, point.lng, obstructionid);
+        });
     }
 }
 
 
-function initThreeOneOneMarkerLegendHack () {
-    // CARTO's auto-generated legend doesn't have our ThreeOneOne markers, of course
-    // so we need to hack the DOM to splice it in there
+function initGetStarted (lat, lng, obstructionid) {
+    // the real startup, now that we have a lat,lng to get started
 
-    const waitforit = setInterval(watchUntilInsert, 0.1 * 1000);
+    // reset the zoom-home control to this latlng & max-zoom
+    // then zoom there
+    MAP.zoombar.options.homeBounds = null;
+    MAP.zoombar.options.homeLatLng = [lat, lng];
+    MAP.zoombar.options.homeZoom = MAX_ZOOM;
+    MAP.zoombar._zoomHome();
 
-    function watchUntilInsert () {
-        const $legend = $('#themap div.cartodb-legend.category ul');
-        if (! $legend.length) return;
-        clearInterval(waitforit);
+    // lay down a simple marker at the given latlng
+    L.marker([lat, lng], {
+        title: 'Selected location',
+        zIndexOffset: 10000,  // very high on the stack, always on top
+    }).addTo(MAP);
 
-        const $threeoneone = $('<li><img src="nyc311.png" style="width: 15px; height: 15px;"></div> 311 Complaint</li>');
-        $threeoneone.appendTo($legend);
-    }
+    // fetch & draw the 311 complaints nearby
+    loadThreeOneOneComplaintsByLatLng(lat, lng, SOCRATA311_QUERY_METERS);
+
+    // fetch & draw the obstruction points nearby
+    loadObstructionPointsByLatLng(lat, lng, CARTO_QUERY_METERS, obstructionid);
 }
 
 
@@ -145,9 +155,7 @@ function initMap () {
 
     MAP.basemapbar = L.basemapbar({
       layers: MAP_BASEMAPS,
-    })
-      .addTo(MAP)
-      .selectLayer(MAP_BASEMAPS[0].label);
+    }).addTo(MAP).selectLayer(MAP_BASEMAPS[0].label);
 
     MAP.zoombar = L.zoombar({
       position: 'topright',
@@ -155,85 +163,35 @@ function initMap () {
       homeIconUrl: './home.svg',
     }).addTo(MAP);
 
-    L.control
-      .scale({
-        position: 'bottomright',
+    L.control.scale({
+        position: 'bottomleft',
         updateWhenIdle: true,
-      })
-      .addTo(MAP);
+    }).addTo(MAP);
 
-    // add the CARTO viz for the WalkMapper obstructions
-    // keep a reference as MAP.obstructions
-    cartodb.createLayer(MAP, CARTO_VIZJSON_URL, { https: true })
-    .addTo(MAP)
-    .on('done', function (layer) {
-        MAP.obstructions = layer;
-// GDA TODO improve the popups? hasn't been requested but seems like that's coming
-    })
-    .on('error', function (err) {
-        console.error(`cartodb.createLayer: ${err}`);
-        alert("Could not load the visualization. Please try again.");
-    });
+    L.ginfocredits({
+        image: './greeninfo.png',
+        link: 'http://www.greeninfo.org/',
+        text: 'Interactive mapping<br/>by GreenInfo Network',
+        position: 'bottomright',
+    }).addTo(MAP);
 
-    // add a L.FeatureGroup for 311 complaint markers
-    // see loadThreeOneOneComplaints*() functions
-    // and stick it onto a pane so we can control stacking between this and MAP.threeoneone markers
-    MAP.threeoneone = L.featureGroup([]).addTo(MAP);
-}
+    // a simple static legend
+    L.staticlegendcontrol({
+        position: 'bottomleft',
+        htmlcontent: `
+        <div>
+            <ul style="list-style-type: none; padding-left: 0; margin: 0;">
+                <li><div style="display: inline-block; vertical-align: text-top; width: 15px; height: 15px; border-radius: 50%; background: #b81609;"></div> Crossing</li>
+            	<li><div style="display: inline-block; vertical-align: text-top; vertical-align: text-top; width: 15px; height: 15px; border-radius: 50%; background: #7b00b4;"></div> Curb</li>
+                <li><div style="display: inline-block; vertical-align: text-top; width: 15px; height: 15px; border-radius: 50%; background: #136400;"></div> Sidewalk</li>
+                <li><img src="nyc311.png" style="vertical-align: text-top; width: 15px; height: 15px;"> 311 Complaint</li>
+            </ul>
+        </div>
+        `,
+    }).addTo(MAP);
 
-
-function fetchObstructionPointAndThen (complaintid, onsuccess) {
-    // tip: obstruction points "id" is its MySQL ID used by the website; known unique, preferred as the PK
-    const sql = `SELECT * FROM ${CARTO_DB_TABLE} WHERE id={{ complaintid }}`
-    const vars = { complaintid: complaintid };
-    new cartodb.SQL({ user: CARTO_USERNAME })
-    .execute(sql, vars)
-    .done(function(data) {
-        onsuccess(data.rows[0]);  // may be undefined if 0 match, caller should expect that        
-    });
-}
-
-
-function zoomToLatLng (lat, lng) {
-    MAP.setView([lat, lng], MAX_ZOOM);
-}
-
-
-function zoomToObstructionPoint (complaintid) {
-    fetchObstructionPointAndThen(complaintid, function (point) {
-        if (! point) return;
-
-        // zoom to that point's latlng
-        MAP.setView([point.obstructionlat, point.obstructionlong], MAX_ZOOM);
-
-        // click it to make its infowindow
-        setTimeout(function () {
-            const latlng = [point.obstructionlat, point.obstructionlong];
-            MAP.obstructions.trigger('featureClick', null, latlng, null, { cartodb_id: point.cartodb_id }, 0);
-        }, 1 * 1000);
-
-        // make the point stand out by making it larger,
-        // but then also change our SQL to ORDER BY so this now-large marker comes at the bottom and won't obscure others
-        MAP.obstructions.getSubLayer(0).setSQL(`SELECT * FROM ${CARTO_DB_TABLE} ORDER BY CASE WHEN id=${complaintid} THEN 0 ELSE 1 END`);
-
-        let cartocss = MAP.obstructions.getSubLayer(0).getCartoCSS();
-        cartocss += `
-        #${CARTO_DB_TABLE}[id=${complaintid}] {
-            marker-width: 30;
-            marker-line-color: black;
-            marker-line-width: 2;
-        }
-        `;
-        MAP.obstructions.getSubLayer(0).setCartoCSS(cartocss);
-    });
-}
-
-
-function loadThreeOneOneComplaintsByObstructionPoint (complaintid) {
-    fetchObstructionPointAndThen(complaintid, function (point) {
-        if (! point) return;
-        loadThreeOneOneComplaintsByLatLng(point.obstructionlat, point.obstructionlong, SOCRATA_QUERY_METERS);
-    });
+    // L.FeatureGroup for the obstruction markers and the 311 complaint markers
+    MAP.markers = L.featureGroup([]).addTo(MAP);
 }
 
 
@@ -248,23 +206,172 @@ function loadThreeOneOneComplaintsByLatLng (lat, lng, meters) {
     $.getJSON(apiurl, function (threeoneonepoints) {
         threeoneonepoints.forEach(function (point) {
             const marker = makeThreeOneOneMarker(point);
-            marker.addTo(MAP.threeoneone);
+            marker.addTo(MAP.markers);
         });
     });
 }
 
 
-function makeThreeOneOneMarker (point) {
-    const lat = parseFloat(point.latitude);
-    const lng = parseFloat(point.longitude);
-    const tooltip = `${point.complaint_type} - ${point.status}`;
+function loadObstructionPointsByLatLng (lat, lng, meters, obstructionid) {
+    // fetch the nearby points from CARTO as a GeoJSON document
+    // we don't use cartodb.js cuz that includes their bundled Leaflet 0.7 and we only need a couple of simple SELECT queries
+    const sql = `
+    SELECT *, ST_X(the_geom) AS lng, ST_Y(the_geom) AS lat
+    FROM ${CARTO_OBSTRUCTIONS_TABLE}
+    WHERE ST_DWITHIN(ST_SETSRID(ST_MAKEPOINT(${lng}, ${lat}), 4326)::geography, the_geom::geography, ${meters})
+    `;
+    const params = {
+        q: sql,
+        format: 'GeoJSON',
+    };
 
-    // compose a HTML template, then slot in the values
+    $.getJSON(CARTO_SQL_URL, params, function (gjdoc) {
+        // this adds a whole L.geoJSON featuregroup to MAP.markers, not individual markers
+        // for now this is okay since we have no need to refer back to markers, reload them, ...
+        const newmarkers = L.geoJSON(gjdoc, {
+            pointToLayer: function (point, latlng) {
+                const isfocused = obstructionid && obstructionid == point.properties.id;
+                const marker = makeObstructionMarker(point, latlng, isfocused);
+                return marker;
+            },
+        });
+
+        newmarkers.addTo(MAP.markers);
+    });
+}
+
+
+function makeObstructionMarker (point, latlng, isfocused) {
+    // compose the icon, which depends on whether we're focusing a specific obstruction
+    const iconsize = isfocused ? [39, 39] : [19, 19];
+    const zindex = isfocused ? -100 : 0;
+    let classnames = ['obstruction-marker-icon', `obstruction-marker-icon-${point.properties.topcategory.toLowerCase().replace(/\W/, '')}`, ];
+    if (isfocused) classnames.push('obstruction-marker-icon-focused');
+
+    const circle = L.divIcon({
+        className: classnames.join(' '),
+        iconSize: iconsize,
+    });
+
+   // for the popup/infowindow, compose a HTML template, then slot in the values
     const $html = $(`
     <table class="table table-sm table-striped mb-0">
         <thead>
             <tr>
-                <th colspan="2">NYC 311 Complaint</th>
+                <th colspan="2">WalkMapper Obstruction</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="fw-bold">Type</td>
+                <td>
+                    <span data-slot="topcategory">-</span>
+                    <br/>
+                    <span data-slot="subcategory">-</span>
+                </td>
+            </tr>
+            <tr>
+                <td class="fw-bold">Location</td>
+                <td>
+                    <span data-slot="address">-</span>
+                    <br/>
+                    <span data-slot="locationdetail">-</span>
+                </td>
+            </tr>
+            <tr>
+                <td class="fw-bold">Reported</td>
+                <td><span data-slot="isfirsttime">-</span></td>
+            </tr>
+            <tr>
+                <td class="fw-bold">Completed</td>
+                <td><span data-slot="completeddate">-</span></td>
+            </tr>
+            <tr>
+                <td class="fw-bold">Photos</td>
+                <td>
+                    <span data-slot="image1">-</span>
+                    <span data-slot="image2">-</span>
+                    <span data-slot="image3">-</span>
+                    <span data-slot="image4">-</span>
+                    <span data-slot="image5">-</span>
+                </td>
+            </tr>
+         </tbody>
+    </table>
+    `);
+
+    for (const [fieldname, value] of Object.entries(point.properties)) {
+        let displayvalue = value;
+
+        switch (fieldname) {
+            case 'createdat':
+            case 'completeddate':
+                displayvalue = displayvalue ? displayvalue.substr(0, 10) : '-';
+                $html.find(`span[data-slot="${fieldname}"]`).text(displayvalue);
+                break;
+            case 'isfirsttime':
+                if (point.properties.isthirdtime && point.properties.thirdtimesenddate) {
+                    displayvalue = [
+                        '3+ times',
+                        point.properties.createdat.substr(0, 10),
+                        point.properties.secondtimesenddate.substr(0, 10),
+                        point.properties.thirdtimesenddate.substr(0, 10),
+                    ].join('<br/>');
+                }
+                else if (point.properties.issecondtime && point.properties.secondtimesenddate) {
+                    displayvalue = [
+                        '2 times',
+                        point.properties.createdat.substr(0, 10),
+                        point.properties.secondtimesenddate.substr(0, 10),
+                    ].join('<br/>');
+                }
+                else if (point.properties.isfirsttime) {
+                    displayvalue = [
+                        '1 time',
+                        point.properties.createdat.substr(0, 10),
+                    ].join('<br/>');
+                }
+
+                $html.find(`span[data-slot="${fieldname}"]`).html(displayvalue);
+                break;
+            case 'image1':
+            case 'image2':
+            case 'image3':
+            case 'image4':
+            case 'image5':
+                if (value) {
+                    const url = `${OBSTRUCTION_IMAGE_BASEURL}/${value}`;
+                    displayvalue = `<a href="${url}" target="_blank" rel="nofollow noopener noreferrer"><img src="${url}" style="width: ${OBSTRUCTION_IMAGE_THUMB_SIZE}px; max-height: ${OBSTRUCTION_IMAGE_THUMB_SIZE}px;" /></a>`;
+                }
+
+                $html.find(`span[data-slot="${fieldname}"]`).html(displayvalue);
+                break;
+            default:
+                $html.find(`span[data-slot="${fieldname}"]`).text(displayvalue);
+                break;
+        }
+    }
+
+    // create and return the obstruction marker
+    const tooltip = `${point.properties.topcategory} - ${point.properties.locationdetail}`;
+    const marker = L.marker(latlng, {
+        icon: circle,
+        zIndexOffset: zindex,
+    })
+    .bindTooltip(tooltip)
+    .bindPopup($html.get(0));
+
+    return marker;
+}
+
+
+function makeThreeOneOneMarker (point) {
+    // for the popup/infowindow, compose a HTML template, then slot in the values
+    const $html = $(`
+    <table class="table table-sm table-striped mb-0">
+        <thead>
+            <tr>
+                <th colspan="2">NYC311 Complaint</th>
             </tr>
         </thead>
         <tbody>
@@ -312,26 +419,28 @@ function makeThreeOneOneMarker (point) {
         switch (fieldname) {
             case 'created_date':
             case 'resolution_action_updated_date':
-                displayvalue = displayvalue.substr(0, 10);
+                displayvalue = displayvalue ? displayvalue.substr(0, 10) : '-';
                 break;
         }
 
         $html.find(`span[data-slot="${fieldname}"]`).text(displayvalue);
     }
 
-    // the icon for the ThreeOneOne Marker
+    // the icon for the ThreeOneOne marker
     const xicon = L.icon({
         iconUrl: 'nyc311.png',
         iconSize: [19, 19],
-        iconAnchor: [10, 10],
-        popupAnchor: [0, 0],
     });
 
-    // create the ThreeOneOne Marker
+    // create and return the ThreeOneOne marker
+    const lat = parseFloat(point.latitude);
+    const lng = parseFloat(point.longitude);
+    const tooltip = `${point.complaint_type} - ${point.status}`;
     const marker = L.marker([lat, lng], {
         icon: xicon,
-        title: tooltip,
+        zIndexOffset: 1000,
     })
+    .bindTooltip(tooltip)
     .bindPopup($html.get(0));
 
     return marker;

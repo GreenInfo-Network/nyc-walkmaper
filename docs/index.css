@@ -25,18 +25,27 @@ div.cartodb-legend-stack {
     background-color: yellow;
 }
 
-.leaflet-popup-content {
-    margin: 0;
+#themap div.leaflet-marker-icon.obstruction-marker-icon {
+    border-radius: 50%;
+
+    background-color: white;  /* overridden based on classification, see JS code */
+
+    /* border: 1px solid black; */
+}
+#themap div.leaflet-marker-icon.obstruction-marker-icon.obstruction-marker-icon-focused {
+    border: 1px solid black;
+    opacity: 0.50;
+}
+#themap div.leaflet-marker-icon.obstruction-marker-icon.obstruction-marker-icon-crossing {
+    background: #b81609;
+}
+#themap div.leaflet-marker-icon.obstruction-marker-icon.obstruction-marker-icon-curb {
+    background: #7b00b4;
+}
+#themap div.leaflet-marker-icon.obstruction-marker-icon.obstruction-marker-icon-sidewalk {
+    background: #136400;
 }
 
-div.cartodb-legend.category ul li .bullet, div.cartodb-legend.color ul li .bullet, div.cartodb-legend.custom ul li .bullet {
-    width: 15px;
-    height: 15px;
-}
-div.cartodb-legend.category ul li, div.cartodb-legend.color ul li, div.cartodb-legend.custom ul li {
-    height: 15px;
-    line-height: 15px;
-}
-div.cartodb-legend {
-    padding: 10px;
+#themap .leaflet-popup-content {
+    margin: 0;
 }
