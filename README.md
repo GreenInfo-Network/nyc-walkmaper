@@ -18,14 +18,14 @@ A simple client-side map that accepts either a latlng or an ID of a complaint fr
 
 ## Hosting and Website
 
-Hosted on Github Pages: https://greeninfo-network.github.io/nyc-walkmapper/
+Hosted on Github Pages. Accepts URL params to focus a specific point.
 
-Accepts URL params to focus a specific point:
-https://greeninfo-network.github.io/nyc-walkmapper/?id=790
-https://greeninfo-network.github.io/nyc-walkmapper/?latlng=40.757012,-73.991635
-https://greeninfo-network.github.io/nyc-walkmapper/?lnglat=-73.991635,40.757012
+* https://greeninfo-network.github.io/nyc-walkmapper/
+* https://greeninfo-network.github.io/nyc-walkmapper/?id=790
+* https://greeninfo-network.github.io/nyc-walkmapper/?latlng=40.757012,-73.991635
+* https://greeninfo-network.github.io/nyc-walkmapper/?lnglat=-73.991635,40.757012
 
-Their main website at GDATBDGDATBDGDATBDGDATBD will embed iframes which use these params.
+Their main website at http://walkmapper-admin.chekpeds.com/ will embed iframes which use these params.
 
 
 
