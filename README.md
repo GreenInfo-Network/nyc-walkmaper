@@ -32,8 +32,14 @@ ETL script https://github.com/GreenInfo-Network/nyc-crash-mapper-etl-script/tree
 
 ## Web Development
 
-Full front-end using CARTO APIs to read the **walkmapper_obstructions** DB table.
+Front-end only. Hosted on Github Pages from the selfsame Github repo, using the `docs/` folder.
 
-Hosted on Github Pages from the selfsame Github repo, using the `docs/` folder.
+All files are in the `docs/` folder. Plain JS/CSS/HTML with no build system.
 
-Plain JS/CSS/HTML with no build system.
+Uses CARTO APIs to read the **walkmapper_obstructions** DB table.
+
+Development instructions:
+* Go into the `docs/` subfolder which contains the web files.
+* Run a local HTTP server with Python: `python3 -m http.server 6745`
+* Visit the site at http://localhost:6745/
+* Make edits to **index.html** et al.
