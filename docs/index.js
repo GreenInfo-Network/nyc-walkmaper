@@ -52,21 +52,24 @@ const SOCRATA_QUERY_METERS = 250; // GDA
 let MAP;
 const START_BBOX = [[40.580, -74.005], [40.880, -73.885]];
 const MIN_ZOOM = 10;
-const MAX_ZOOM = 18;
+const MAX_ZOOM = 19;
 
 // the options for the basemap bar
 const MAP_BASEMAPS = [
     {
+        // Voyager only goes to 19 but has address numbers!
         type: 'xyz',
         label: 'Map',
-        url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png',
-        attrib: 'Map tiles by <a target="_blank" href="http://www.mapbox.com">MapBox</a>.<br />Data &copy; <a target="_blank" href="http://openstreetmap.org/copyright" target="_blank">OpenStreetMap contributings</a>',
+        url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+        attrib: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        tileLayerOptions: { maxZoom: MAX_ZOOM, },
     },
     {
         type: 'xyz',
         label: 'Photo',
         url: 'http://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
         attrib: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+        tileLayerOptions: { maxZoom: MAX_ZOOM, },
     },
 ];
 
@@ -77,6 +80,7 @@ const MAP_BASEMAPS = [
 
 $(document).ready(function () {
     initMap();
+    initThreeOneOneMarkerLegendHack();
 
     setTimeout(function () {
         initLoadInitialState();
@@ -106,6 +110,23 @@ function initLoadInitialState () {
         const lng = parseFloat(lnglat[1]);
         zoomToLatLng(lat, lng);
         loadThreeOneOneComplaintsByLatLng(lat, lng, SOCRATA_QUERY_METERS);
+    }
+}
+
+
+function initThreeOneOneMarkerLegendHack () {
+    // CARTO's auto-generated legend doesn't have our ThreeOneOne markers, of course
+    // so we need to hack the DOM to splice it in there
+
+    const waitforit = setInterval(watchUntilInsert, 0.1 * 1000);
+
+    function watchUntilInsert () {
+        const $legend = $('#themap div.cartodb-legend.category ul');
+        if (! $legend.length) return;
+        clearInterval(waitforit);
+
+        const $threeoneone = $('<li><img src="nyc311.png" style="width: 15px; height: 15px;"></div> 311 Complaint</li>');
+        $threeoneone.appendTo($legend);
     }
 }
 
@@ -142,11 +163,11 @@ function initMap () {
       .addTo(MAP);
 
     // add the CARTO viz for the WalkMapper obstructions
-    // keep a reference as MAP.visualization
+    // keep a reference as MAP.obstructions
     cartodb.createLayer(MAP, CARTO_VIZJSON_URL, { https: true })
     .addTo(MAP)
     .on('done', function (layer) {
-        MAP.visualization = layer;
+        MAP.obstructions = layer;
 // GDA TODO improve the popups? hasn't been requested but seems like that's coming
     })
     .on('error', function (err) {
@@ -156,6 +177,7 @@ function initMap () {
 
     // add a L.FeatureGroup for 311 complaint markers
     // see loadThreeOneOneComplaints*() functions
+    // and stick it onto a pane so we can control stacking between this and MAP.threeoneone markers
     MAP.threeoneone = L.featureGroup([]).addTo(MAP);
 }
 
@@ -180,12 +202,29 @@ function zoomToLatLng (lat, lng) {
 function zoomToObstructionPoint (complaintid) {
     fetchObstructionPointAndThen(complaintid, function (point) {
         if (! point) return;
+
+        // zoom to that point's latlng
         MAP.setView([point.obstructionlat, point.obstructionlong], MAX_ZOOM);
 
+        // click it to make its infowindow
         setTimeout(function () {
             const latlng = [point.obstructionlat, point.obstructionlong];
-            MAP.visualization.trigger('featureClick', null, latlng, null, { cartodb_id: point.cartodb_id }, 0);
+            MAP.obstructions.trigger('featureClick', null, latlng, null, { cartodb_id: point.cartodb_id }, 0);
         }, 1 * 1000);
+
+        // make the point stand out by making it larger,
+        // but then also change our SQL to ORDER BY so this now-large marker comes at the bottom and won't obscure others
+        MAP.obstructions.getSubLayer(0).setSQL(`SELECT * FROM ${CARTO_DB_TABLE} ORDER BY CASE WHEN id=${complaintid} THEN 0 ELSE 1 END`);
+
+        let cartocss = MAP.obstructions.getSubLayer(0).getCartoCSS();
+        cartocss += `
+        #${CARTO_DB_TABLE}[id=${complaintid}] {
+            marker-width: 30;
+            marker-line-color: black;
+            marker-line-width: 2;
+        }
+        `;
+        MAP.obstructions.getSubLayer(0).setCartoCSS(cartocss);
     });
 }
 
@@ -193,7 +232,7 @@ function zoomToObstructionPoint (complaintid) {
 function loadThreeOneOneComplaintsByObstructionPoint (complaintid) {
     fetchObstructionPointAndThen(complaintid, function (point) {
         if (! point) return;
-        loadThreeOneOneComplaintsByLocation(point.obstructionlat, point.obstructionlong, SOCRATA_QUERY_METERS);
+        loadThreeOneOneComplaintsByLatLng(point.obstructionlat, point.obstructionlong, SOCRATA_QUERY_METERS);
     });
 }
 
@@ -220,47 +259,50 @@ function makeThreeOneOneMarker (point) {
     const lng = parseFloat(point.longitude);
     const tooltip = `${point.complaint_type} - ${point.status}`;
 
-    // the icon for the marker
-    const xicon = L.divIcon({
-        html: '!',
-        className: 'divmarker-threeoneone',
-    });
-
     // compose a HTML template, then slot in the values
     const $html = $(`
     <table class="table table-sm table-striped mb-0">
-        <tr>
-            <td class="fw-bold">Type</td>
-            <td>
-                <span data-slot="complaint_type">-</span>
-                <br/>
-                <span data-slot="descriptor">-</span>
-            </td>
-        </tr>
-        <tr>
-            <td class="fw-bold">Status</td>
-            <td><span data-slot="status">-</span></td>
-        </tr>
-        <tr>
-            <td class="fw-bold">Resolution</td>
-            <td>
-                <span data-slot="resolution_action_updated_date">-</span>
-                <br/>
-                <span data-slot="resolution_description">-</span>
-            </td>
-        </tr>
-        <tr>
-            <td class="fw-bold">Agency</td>
-            <td><span data-slot="agency_name">-</span></td>
-        </tr>
-        <tr>
-            <td class="fw-bold">Created</td>
-            <td><span data-slot="created_date">-</span></td>
-        </tr>
-        <tr>
-            <td class="fw-bold">ID</td>
-            <td><span data-slot="unique_key">-</span></td>
-        </tr>
+        <thead>
+            <tr>
+                <th colspan="2">NYC 311 Complaint</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td class="fw-bold">Type</td>
+                <td>
+                    <span data-slot="complaint_type">-</span>
+                    <br/>
+                    <span data-slot="descriptor">-</span>
+                </td>
+            </tr>
+            <tr>
+                <td class="fw-bold">Status</td>
+                <td><span data-slot="status">-</span></td>
+            </tr>
+            <tr>
+                <td class="fw-bold">Resolution</td>
+                <td>
+                    <span data-slot="resolution_action_updated_date">-</span>
+                    <br/>
+                    <span data-slot="resolution_description">-</span>
+                </td>
+            </tr>
+            <tr>
+                <td class="fw-bold">Agency</td>
+                <td><span data-slot="agency_name">-</span></td>
+            </tr>
+            <tr>
+                <td class="fw-bold">Created</td>
+                <td><span data-slot="created_date">-</span></td>
+            </tr>
+            <!--
+            <tr>
+                <td class="fw-bold">ID</td>
+                <td><span data-slot="unique_key">-</span></td>
+            </tr>
+            -->
+        </tbody>
     </table>
     `);
 
@@ -277,7 +319,15 @@ function makeThreeOneOneMarker (point) {
         $html.find(`span[data-slot="${fieldname}"]`).text(displayvalue);
     }
 
-    // create the Marker
+    // the icon for the ThreeOneOne Marker
+    const xicon = L.icon({
+        iconUrl: 'nyc311.png',
+        iconSize: [19, 19],
+        iconAnchor: [10, 10],
+        popupAnchor: [0, 0],
+    });
+
+    // create the ThreeOneOne Marker
     const marker = L.marker([lat, lng], {
         icon: xicon,
         title: tooltip,

@@ -28,3 +28,15 @@ div.cartodb-legend-stack {
 .leaflet-popup-content {
     margin: 0;
 }
+
+div.cartodb-legend.category ul li .bullet, div.cartodb-legend.color ul li .bullet, div.cartodb-legend.custom ul li .bullet {
+    width: 15px;
+    height: 15px;
+}
+div.cartodb-legend.category ul li, div.cartodb-legend.color ul li, div.cartodb-legend.custom ul li {
+    height: 15px;
+    line-height: 15px;
+}
+div.cartodb-legend {
+    padding: 10px;
+}
