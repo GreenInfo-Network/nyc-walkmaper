@@ -41,7 +41,7 @@ L.Control.BasemapBar = L.Control.extend({
                     // params:
                     //      url             the URL template of the XYZ tile service, as is usual for a L.TileLayer
                     //      attribution     attribution (text/html) when this layer is showing
-                    var options = L.Util.extend({ attribution:layeroption.attribution }, layeroption.tileLayerOptions);
+                    var options = L.Util.extend({}, layeroption.tileLayerOptions);
                     var tilelayer = L.tileLayer(layeroption.url, options);
 
                     // hack for WAVE accessibility testing robot; it complains that the map tiles don't have alt tags

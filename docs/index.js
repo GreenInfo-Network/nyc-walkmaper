@@ -63,15 +63,19 @@ const MAP_BASEMAPS = [
         type: 'xyz',
         label: 'Map',
         url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-        attrib: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        tileLayerOptions: { maxZoom: MAX_ZOOM, },
+        tileLayerOptions: {
+            maxZoom: MAX_ZOOM,
+            attribution: 'Base map &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        },
     },
     {
         type: 'xyz',
         label: 'Photo',
         url: 'http://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-        attrib: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-        tileLayerOptions: { maxZoom: MAX_ZOOM, },
+        tileLayerOptions: {
+            maxZoom: MAX_ZOOM,
+            attribution: 'Base map &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+        },
     },
 ];
 
@@ -148,10 +152,16 @@ function initMap () {
         maxZoom: MAX_ZOOM,
         keyboard: true,
         zoomControl: false,
+        attributionControl: false,
     })
     .fitBounds(START_BBOX);
 
     MAP._container.ariaLabel = 'Map showing retailer location. Pan with arrow keys. Zoom in with + key. Zoom out with - key.';
+
+    MAP.attribution = L.control.attribution().addTo(MAP);
+    MAP.attribution.setPrefix('');
+    MAP.attribution.addAttribution('Powered by <a href="https://leafletjs.com/">Leaflet</a> and <a href="https://carto.com/">CARTO</a>');
+    MAP.attribution.addAttribution('311 Data from <a href="https://portal.311.nyc.gov/">NYC311</a>');
 
     MAP.basemapbar = L.basemapbar({
       layers: MAP_BASEMAPS,
@@ -196,14 +206,20 @@ function initMap () {
 
 
 function loadThreeOneOneComplaintsByLatLng (lat, lng, meters) {
+    const url = SOCRATA311_URL;
+
     const sincewhen = new Date(new Date().setFullYear(new Date().getFullYear() - 2)).toISOString().substr(0, 19);
     const complaintypes = SOCRATA311_COMPLAINTYPES.map(function (word) {
         const escaped = word.replace("'", "\\'");
         return `'${escaped}'`;
     }).join(',');
-    const apiurl = `${SOCRATA311_URL}?$where=complaint_type IN (${complaintypes}) AND created_date >= '${sincewhen}' AND within_circle(location, ${lat}, ${lng}, ${meters})`;
+    const whereclause = `complaint_type IN (${complaintypes}) AND created_date >= '${sincewhen}' AND status != 'Closed' AND within_circle(location, ${lat}, ${lng}, ${meters})`;
 
-    $.getJSON(apiurl, function (threeoneonepoints) {
+    const params = {
+        $where: whereclause,
+    };
+
+    $.getJSON(url, params, function (threeoneonepoints) {
         threeoneonepoints.forEach(function (point) {
             const marker = makeThreeOneOneMarker(point);
             marker.addTo(MAP.markers);
