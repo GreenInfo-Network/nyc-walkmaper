@@ -24,6 +24,7 @@ Hosted on Github Pages. Accepts URL params to focus a specific point.
 * https://greeninfo-network.github.io/nyc-walkmapper/?id=790
 * https://greeninfo-network.github.io/nyc-walkmapper/?latlng=40.757012,-73.991635
 * https://greeninfo-network.github.io/nyc-walkmapper/?lnglat=-73.991635,40.757012
+* https://greeninfo-network.github.io/nyc-walkmapper/iframe-examples.html
 
 Their main website at http://walkmapper-admin.chekpeds.com/ will embed iframes which use these params.
 
