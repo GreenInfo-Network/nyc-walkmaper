@@ -88,10 +88,24 @@ function initLoadInitialState () {
     const params = new URLSearchParams(window.location.search);
 
     const complaintid = params.get('id');
+    const latlng = params.get('latlng') ? params.get('latlng').match(/^([\d\.\-]+),([\d\.\-]+)$/) : null;
+    const lnglat = params.get('lnglat') ? params.get('lnglat').match(/^([\d\.\-]+),([\d\.\-]+)$/) : null;
 
     if (complaintid) {
-        zoomToComplaintPoint(complaintid);
-        loadThreeOneOneComplaintsByComplaintPoint(complaintid);
+        zoomToObstructionPoint(complaintid);
+        loadThreeOneOneComplaintsByObstructionPoint(complaintid);
+    }
+    else if (latlng) {
+        const lat = parseFloat(latlng[1]);
+        const lng = parseFloat(latlng[2]);
+        zoomToLatLng(lat, lng);
+        loadThreeOneOneComplaintsByLatLng(lat, lng, SOCRATA_QUERY_METERS);
+    }
+    else if (lnglat) {
+        const lat = parseFloat(lnglat[2]);
+        const lng = parseFloat(lnglat[1]);
+        zoomToLatLng(lat, lng);
+        loadThreeOneOneComplaintsByLatLng(lat, lng, SOCRATA_QUERY_METERS);
     }
 }
 
@@ -146,8 +160,9 @@ function initMap () {
 }
 
 
-function fetchComplaintPointAndThen (complaintid, onsuccess) {
-    const sql = `SELECT * FROM ${CARTO_DB_TABLE} WHERE cartodb_id={{ complaintid }}`
+function fetchObstructionPointAndThen (complaintid, onsuccess) {
+    // tip: obstruction points "id" is its MySQL ID used by the website; known unique, preferred as the PK
+    const sql = `SELECT * FROM ${CARTO_DB_TABLE} WHERE id={{ complaintid }}`
     const vars = { complaintid: complaintid };
     new cartodb.SQL({ user: CARTO_USERNAME })
     .execute(sql, vars)
@@ -157,8 +172,13 @@ function fetchComplaintPointAndThen (complaintid, onsuccess) {
 }
 
 
-function zoomToComplaintPoint (complaintid) {
-    fetchComplaintPointAndThen(complaintid, function (point) {
+function zoomToLatLng (lat, lng) {
+    MAP.setView([lat, lng], MAX_ZOOM);
+}
+
+
+function zoomToObstructionPoint (complaintid) {
+    fetchObstructionPointAndThen(complaintid, function (point) {
         if (! point) return;
         MAP.setView([point.obstructionlat, point.obstructionlong], MAX_ZOOM);
 
@@ -170,16 +190,15 @@ function zoomToComplaintPoint (complaintid) {
 }
 
 
-function loadThreeOneOneComplaintsByComplaintPoint (complaintid) {
-
-    fetchComplaintPointAndThen(complaintid, function (point) {
+function loadThreeOneOneComplaintsByObstructionPoint (complaintid) {
+    fetchObstructionPointAndThen(complaintid, function (point) {
         if (! point) return;
         loadThreeOneOneComplaintsByLocation(point.obstructionlat, point.obstructionlong, SOCRATA_QUERY_METERS);
     });
 }
 
 
-function loadThreeOneOneComplaintsByLocation (lat, lng, meters) {
+function loadThreeOneOneComplaintsByLatLng (lat, lng, meters) {
     const sincewhen = new Date(new Date().setFullYear(new Date().getFullYear() - 2)).toISOString().substr(0, 19);
     const complaintypes = SOCRATA311_COMPLAINTYPES.map(function (word) {
         const escaped = word.replace("'", "\\'");
@@ -187,75 +206,83 @@ function loadThreeOneOneComplaintsByLocation (lat, lng, meters) {
     }).join(',');
     const apiurl = `${SOCRATA311_URL}?$where=complaint_type IN (${complaintypes}) AND created_date >= '${sincewhen}' AND within_circle(location, ${lat}, ${lng}, ${meters})`;
 
+    $.getJSON(apiurl, function (threeoneonepoints) {
+        threeoneonepoints.forEach(function (point) {
+            const marker = makeThreeOneOneMarker(point);
+            marker.addTo(MAP.threeoneone);
+        });
+    });
+}
+
+
+function makeThreeOneOneMarker (point) {
+    const lat = parseFloat(point.latitude);
+    const lng = parseFloat(point.longitude);
+    const tooltip = `${point.complaint_type} - ${point.status}`;
+
+    // the icon for the marker
     const xicon = L.divIcon({
         html: '!',
         className: 'divmarker-threeoneone',
     });
 
-    $.getJSON(apiurl, function (threeoneonepoints) {
-        threeoneonepoints.forEach(function (point) {
-            const lat = parseFloat(point.latitude);
-            const lng = parseFloat(point.longitude);
-            const tooltip = `${point.complaint_type} - ${point.status}`;
+    // compose a HTML template, then slot in the values
+    const $html = $(`
+    <table class="table table-sm table-striped mb-0">
+        <tr>
+            <td class="fw-bold">Type</td>
+            <td>
+                <span data-slot="complaint_type">-</span>
+                <br/>
+                <span data-slot="descriptor">-</span>
+            </td>
+        </tr>
+        <tr>
+            <td class="fw-bold">Status</td>
+            <td><span data-slot="status">-</span></td>
+        </tr>
+        <tr>
+            <td class="fw-bold">Resolution</td>
+            <td>
+                <span data-slot="resolution_action_updated_date">-</span>
+                <br/>
+                <span data-slot="resolution_description">-</span>
+            </td>
+        </tr>
+        <tr>
+            <td class="fw-bold">Agency</td>
+            <td><span data-slot="agency_name">-</span></td>
+        </tr>
+        <tr>
+            <td class="fw-bold">Created</td>
+            <td><span data-slot="created_date">-</span></td>
+        </tr>
+        <tr>
+            <td class="fw-bold">ID</td>
+            <td><span data-slot="unique_key">-</span></td>
+        </tr>
+    </table>
+    `);
 
-            // compose a HTML template, then slot in the values
-            const $html = $(`
-            <table class="table table-sm table-striped mb-0">
-                <tr>
-                    <td class="fw-bold">Type</td>
-                    <td>
-                        <span data-slot="complaint_type">-</span>
-                        <br/>
-                        <span data-slot="descriptor">-</span>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="fw-bold">Status</td>
-                    <td><span data-slot="status">-</span></td>
-                </tr>
-                <tr>
-                    <td class="fw-bold">Resolution</td>
-                    <td>
-                        <span data-slot="resolution_action_updated_date">-</span>
-                        <br/>
-                        <span data-slot="resolution_description">-</span>
-                    </td>
-                </tr>
-                <tr>
-                    <td class="fw-bold">Agency</td>
-                    <td><span data-slot="agency_name">-</span></td>
-                </tr>
-                <tr>
-                    <td class="fw-bold">Created</td>
-                    <td><span data-slot="created_date">-</span></td>
-                </tr>
-                <tr>
-                    <td class="fw-bold">ID</td>
-                    <td><span data-slot="unique_key">-</span></td>
-                </tr>
-            </table>
-            `);
+    for (const [fieldname, value] of Object.entries(point)) {
+        let displayvalue = value;
 
-            for (const [fieldname, value] of Object.entries(point)) {
-                let displayvalue = value;
+        switch (fieldname) {
+            case 'created_date':
+            case 'resolution_action_updated_date':
+                displayvalue = displayvalue.substr(0, 10);
+                break;
+        }
 
-                switch (fieldname) {
-                    case 'created_date':
-                    case 'resolution_action_updated_date':
-                        displayvalue = displayvalue.substr(0, 10);
-                        break;
-                }
+        $html.find(`span[data-slot="${fieldname}"]`).text(displayvalue);
+    }
 
-                $html.find(`span[data-slot="${fieldname}"]`).text(displayvalue);
-            }
+    // create the Marker
+    const marker = L.marker([lat, lng], {
+        icon: xicon,
+        title: tooltip,
+    })
+    .bindPopup($html.get(0));
 
-            // create the Marker
-            L.marker([lat, lng], {
-                icon: xicon,
-                title: tooltip,
-            })
-            .bindPopup($html.get(0))
-            .addTo(MAP.threeoneone);
-        });
-    });
+    return marker;
 }

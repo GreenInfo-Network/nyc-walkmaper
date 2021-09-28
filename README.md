@@ -1,8 +1,6 @@
 # CHECKPEDS:NYC Walkmapper
 
-## Project Summary (adapted from SOW)
-
-We're going to build a simple client-side map that accepts either a latlng or an ID of a complaint from the Walkmapper system (MySQL DB), and then shows that on a map alongside 311 reports from NYC Socrata _loaded live via API call_
+A simple client-side map that accepts either a latlng or an ID of a complaint from the Walkmapper system (MySQL DB), and then shows that on a map alongside 311 reports from NYC Socrata loaded live via API call.
 
 
 ### GreenInfo Internal Things
@@ -18,15 +16,24 @@ We're going to build a simple client-side map that accepts either a latlng or an
 **1Password** Walk Mapper CHEKPEDS app DB credentials
 
 
+## Hosting and Website
+
+Hosted on Github Pages: https://greeninfo-network.github.io/nyc-walkmapper/
+
+Accepts URL params to focus a specific point:
+https://greeninfo-network.github.io/nyc-walkmapper/?id=790
+https://greeninfo-network.github.io/nyc-walkmapper/?latlng=40.757012,-73.991635
+https://greeninfo-network.github.io/nyc-walkmapper/?lnglat=-73.991635,40.757012
+
+Their main website at GDATBDGDATBDGDATBDGDATBD will embed iframes which use these params.
+
+
 
 ## Data and ETL
 
-CARTO table is **walkmapper_obstructions** This table is public https://chekpeds.carto.com/tables/walkmapper_obstructions
+CARTO table of obstruction points is **walkmapper_obstructions** This table is public https://chekpeds.carto.com/tables/walkmapper_obstructions
 
-MySQL database hosted by client, see 1Password.
-
-ETL script https://github.com/GreenInfo-Network/nyc-crash-mapper-etl-script/tree/master/walkmapper This is run on a schedule by https://dashboard.heroku.com/apps/nyc-crash-mapper-etl/scheduler to load the data into CARTO.
-
+That table is loaded from a MySQL database hosted by client (see 1Password) using a ETL script at https://github.com/GreenInfo-Network/nyc-crash-mapper-etl-script/tree/master/walkmapper This is run on a schedule by https://dashboard.heroku.com/apps/nyc-crash-mapper-etl/scheduler to load the data into CARTO.
 
 
 
