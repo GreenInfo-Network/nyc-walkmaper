@@ -213,7 +213,7 @@ function loadThreeOneOneComplaintsByLatLng (lat, lng, meters) {
         const escaped = word.replace("'", "\\'");
         return `'${escaped}'`;
     }).join(',');
-    const whereclause = `complaint_type IN (${complaintypes}) AND created_date >= '${sincewhen}' AND status != 'Closed' AND within_circle(location, ${lat}, ${lng}, ${meters})`;
+    const whereclause = `complaint_type IN (${complaintypes}) AND created_date >= '${sincewhen}' AND within_circle(location, ${lat}, ${lng}, ${meters})`;
 
     const params = {
         $where: whereclause,
