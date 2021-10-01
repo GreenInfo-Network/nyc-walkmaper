@@ -3,7 +3,7 @@
 const CARTO_USERNAME = 'chekpeds';
 const CARTO_OBSTRUCTIONS_TABLE = 'walkmapper_obstructions';
 const CARTO_SQL_URL = `https://${CARTO_USERNAME}.carto.com/api/v2/sql`;
-const CARTO_QUERY_METERS = 50;
+const CARTO_QUERY_METERS = 15;
 const OBSTRUCTION_IMAGE_BASEURL = 'http://walkmapper.sunnysiderecords.com/uploads/';
 const OBSTRUCTION_IMAGE_THUMB_SIZE = 85;
 
@@ -48,7 +48,7 @@ const SOCRATA311_COMPLAINTYPES = [
     'Bike Rack Complaint',
     'City Vehicle Complaint',
 ];
-const SOCRATA311_QUERY_METERS = 50;
+const SOCRATA311_QUERY_METERS = 15;
 
 // the L.Map and some settings
 let MAP;
