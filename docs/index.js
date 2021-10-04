@@ -185,7 +185,7 @@ function initMap () {
         position: 'bottomright',
     }).addTo(MAP);
 
-    // a simple static legend
+    // a simple static -linklist
     L.staticlegendcontrol({
         position: 'bottomleft',
         htmlcontent: `
@@ -202,6 +202,15 @@ function initMap () {
 
     // L.FeatureGroup for the obstruction markers and the 311 complaint markers
     MAP.markers = L.featureGroup([]).addTo(MAP);
+
+    // weird custom control with list of hyperlinks, which we can update
+    MAP.linklist = L.linklistcontrol({
+        position: 'bottomleft',
+        links: [
+            { id: 'threeoneone', label: "311", href: 'https://www.google.com/' },
+            { id: 'obstructions', label: "WalkMapper", href: 'https://www.greeninfo.org/' },
+        ],
+    }).addTo(MAP);
 }
 
 
@@ -225,6 +234,12 @@ function loadThreeOneOneComplaintsByLatLng (lat, lng, meters) {
             marker.addTo(MAP.markers);
         });
     });
+
+    // compose a Socrata URL to download that same query's results
+    // simply replace the endpoint URL's format suffix
+    const csvurl = SOCRATA311_URL.replace(/\.json$/, '.csv');
+    const downloadurl = `${csvurl}?${$.param(params)}`;
+    MAP.linklist.setLinkUrl('threeoneone', downloadurl);
 }
 
 
@@ -254,6 +269,12 @@ function loadObstructionPointsByLatLng (lat, lng, meters, obstructionid) {
 
         newmarkers.addTo(MAP.markers);
     });
+
+    // compose a CartoDB URL to download that same query's results as CSV
+    // simply replace the endpoint URL's format suffix
+    const downloadparams = { q: sql, format: 'CSV', };
+    const downloadurl = `${CARTO_SQL_URL}?${$.param(downloadparams)}`;
+    MAP.linklist.setLinkUrl('obstructions', downloadurl);
 }
 
 
@@ -311,6 +332,10 @@ function makeObstructionMarker (point, latlng, isfocused) {
                     <span data-slot="image4">-</span>
                     <span data-slot="image5">-</span>
                 </td>
+            </tr>
+            <tr>
+                <td class="fw-bold">ID</td>
+                <td><span data-slot="id">-</span></td>
             </tr>
          </tbody>
     </table>
