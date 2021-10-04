@@ -28,14 +28,13 @@ L.Control.LinkList = L.Control.extend({
 
         // the inner content and title bar
         this._content = L.DomUtil.create('div', '', this._container);
-        this._content.innerHTML = '<p class="leaflet-control-linklist-title">Download <span class="fa fa-download"></span></p>';
 
         // the list of links, and a registry of them by ID
         this._links = {};
         this.options.links.forEach((linkinfo) => {
             const newlink = L.DomUtil.create('a', '', this._content);
             newlink.className = 'leaflet-control-linklist-link';
-            newlink.innerHTML = linkinfo.label;
+            newlink.innerHTML = '<span class="fa fa-download"></span> '+linkinfo.label;
             newlink.href = linkinfo.href;
             newlink.target = '_blank';
 
