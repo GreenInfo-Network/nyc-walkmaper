@@ -40,7 +40,7 @@ L.Control.LinkList = L.Control.extend({
         this.options.links.forEach((linkinfo) => {
             const newlink = L.DomUtil.create('a', '', this._content);
             newlink.className = 'leaflet-control-linklist-link';
-            newlink.innerHTML = linkinfo.label;
+            newlink.innerHTML = `<span class="fa fa-download"></span> ${linkinfo.label}`;
             newlink.href = '#';
 
             newlink._linkid = linkinfo.id;
