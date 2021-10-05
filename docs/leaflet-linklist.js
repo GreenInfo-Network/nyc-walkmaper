@@ -34,7 +34,6 @@ L.Control.LinkList = L.Control.extend({
 
         // the inner content and title bar
         this._content = L.DomUtil.create('div', '', this._container);
-        this._content.innerHTML = '<p class="leaflet-control-linklist-title">Download <span class="fa fa-download"></span></p>';
 
         // the list of links, and a registry of them by ID
         this._links = {};
