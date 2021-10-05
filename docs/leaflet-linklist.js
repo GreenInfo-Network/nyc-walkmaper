@@ -1,5 +1,11 @@
 /*
- * Bar-style basemap picker by GreenInfo Network
+ * highly custom map contyrol for this one use case,
+ * draw some hyperlinks in a panel (easy)
+ * then allow them to have a data-blob reassigned via setLinkDataBlob() e.g. when some CSV / GeoJSON data are had
+ * on clicking a link, trigger a false download of that blob data
+ *
+ * this used to be simple hyperlinks out to data service URLs, but Safari has a bug that it shows data instead of downloading it
+ * so we need this heroic workaround
  */
 
 L.linklistcontrol = function (options) {
@@ -36,8 +42,16 @@ L.Control.LinkList = L.Control.extend({
             const newlink = L.DomUtil.create('a', '', this._content);
             newlink.className = 'leaflet-control-linklist-link';
             newlink.innerHTML = linkinfo.label;
-            newlink.href = linkinfo.href;
-            newlink.target = '_blank';
+            newlink.href = '#';
+
+            newlink._linkid = linkinfo.id;
+            newlink._blobdata = undefined;
+            newlink._filename = linkinfo.filename;
+            newlink._mimetype = linkinfo.mimetype;
+
+            newlink.addEventListener('click', () => {
+                this.handleLinkClick(newlink._linkid);
+            });
 
             this._links[linkinfo.id] = newlink;
         });
@@ -45,9 +59,22 @@ L.Control.LinkList = L.Control.extend({
         // done!
         return this._container;
     },
-    setLinkUrl: function (linkid, newurl) {
+    setBlobData: function (linkid, blobdata) {
         const link = this._links[linkid];
         if (!link) throw new Error(`L.Control.LinkList setLinkUrl() unknown link ID: ${linkid}`);
-        link.href = newurl;
+
+        link._blobdata = blobdata;
+    },
+    handleLinkClick: function (linkid) {
+        const link = this._links[linkid];
+        if (!link) throw new Error(`L.Control.LinkList handleLinkClick() unknown link ID: ${linkid}`);
+
+        // confirmed bug in FileSaver that saveAs() is ion window instead of in FileSaver
+        // https://github.com/eligrey/FileSaver.js/issues/500#issuecomment-447744521
+        const blob = new Blob([link._blobdata], {
+            type: link._mimetype,
+        });
+        // FileSaver.saveAs(blob, link._filename);
+        window.saveAs(blob, link._filename);
     },
 });

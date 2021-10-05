@@ -153,6 +153,7 @@ function initMap () {
         keyboard: true,
         zoomControl: false,
         attributionControl: false,
+        tap: false, // fix Safari popup bug
     })
     .fitBounds(START_BBOX);
 
@@ -185,7 +186,7 @@ function initMap () {
         position: 'bottomright',
     }).addTo(MAP);
 
-    // a simple static -linklist
+    // a simple static
     L.staticlegendcontrol({
         position: 'bottomleft',
         htmlcontent: `
@@ -203,12 +204,12 @@ function initMap () {
     // L.FeatureGroup for the obstruction markers and the 311 complaint markers
     MAP.markers = L.featureGroup([]).addTo(MAP);
 
-    // weird custom control with list of hyperlinks, which we can update
+    // weird custom control with list of fake hyperlinks, which can have blob data sent to them for a fake download
     MAP.linklist = L.linklistcontrol({
         position: 'bottomleft',
         links: [
-            { id: 'threeoneone', label: "311", href: 'https://www.google.com/' },
-            { id: 'obstructions', label: "WalkMapper", href: 'https://www.greeninfo.org/' },
+            { id: 'threeoneone', label: "311", filename: 'nyc311_complaints.csv', mimetype: 'text/csv' },
+            { id: 'obstructions', label: "WalkMapper", filename: 'walkmapper_obstructions.csv', mimetype: 'text/csv' },
         ],
     }).addTo(MAP);
 }
@@ -235,11 +236,12 @@ function loadThreeOneOneComplaintsByLatLng (lat, lng, meters) {
         });
     });
 
-    // compose a Socrata URL to download that same query's results
-    // simply replace the endpoint URL's format suffix
+    // compose a Socrata URL to download that same query's results; simply replace the endpoint URL's format suffix
+    // then run it and assign the resulting geodata into the data blob map control
     const csvurl = SOCRATA311_URL.replace(/\.json$/, '.csv');
-    const downloadurl = `${csvurl}?${$.param(params)}`;
-    MAP.linklist.setLinkUrl('threeoneone', downloadurl);
+    $.get(csvurl, params, function (datablob) {
+        MAP.linklist.setBlobData('threeoneone', datablob);
+    });
 }
 
 
@@ -273,8 +275,9 @@ function loadObstructionPointsByLatLng (lat, lng, meters, obstructionid) {
     // compose a CartoDB URL to download that same query's results as CSV
     // simply replace the endpoint URL's format suffix
     const downloadparams = { q: sql, format: 'CSV', };
-    const downloadurl = `${CARTO_SQL_URL}?${$.param(downloadparams)}`;
-    MAP.linklist.setLinkUrl('obstructions', downloadurl);
+    $.get(CARTO_SQL_URL, downloadparams, function (datablob) {
+        MAP.linklist.setBlobData('obstructions', datablob);
+    });
 }
 
 
@@ -402,6 +405,8 @@ function makeObstructionMarker (point, latlng, isfocused) {
     .bindTooltip(tooltip)
     .bindPopup($html.get(0));
 
+    marker.on('click', function () { this.openPopup(); }); // Safari + Leaflet 1.7.1 workaround
+
     return marker;
 }
 
@@ -483,6 +488,8 @@ function makeThreeOneOneMarker (point) {
     })
     .bindTooltip(tooltip)
     .bindPopup($html.get(0));
+
+    marker.on('click', function () { this.openPopup(); }); // Safari + Leaflet 1.7.1 workaround
 
     return marker;
 }
