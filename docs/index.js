@@ -293,6 +293,24 @@ function makeObstructionMarker (point, latlng, isfocused) {
         iconSize: iconsize,
     });
 
+    const tooltip = `${point.properties.topcategory} - ${point.properties.locationdetail}`;
+
+    const marker = L.marker(latlng, {
+        icon: circle,
+        zIndexOffset: zindex,
+        feature: point,
+    })
+    .bindTooltip(tooltip);
+
+    marker.on('click', function () {
+        openObstructionMarkerPopup(marker);
+    });
+
+    return marker;
+}
+
+
+function openObstructionMarkerPopup (marker) {
    // for the popup/infowindow, compose a HTML template, then slot in the values
     const $html = $(`
     <table class="table table-sm table-striped mb-0">
@@ -344,6 +362,7 @@ function makeObstructionMarker (point, latlng, isfocused) {
     </table>
     `);
 
+    const point = marker.options.feature;
     for (const [fieldname, value] of Object.entries(point.properties)) {
         let displayvalue = value;
 
@@ -396,22 +415,38 @@ function makeObstructionMarker (point, latlng, isfocused) {
         }
     }
 
-    // create and return the obstruction marker
-    const tooltip = `${point.properties.topcategory} - ${point.properties.locationdetail}`;
-    const marker = L.marker(latlng, {
-        icon: circle,
-        zIndexOffset: zindex,
-    })
-    .bindTooltip(tooltip)
-    .bindPopup($html.get(0));
+    const htmldiv = $html.get(0);
+    const latlng = marker.getLatLng();
+    MAP.openPopup(htmldiv, latlng);
+}
 
-    marker.on('click', function () { this.openPopup(); }); // Safari + Leaflet 1.7.1 workaround
+
+function makeThreeOneOneMarker (point) {
+    // create and return the ThreeOneOne marker
+    const xicon = L.icon({
+        iconUrl: 'nyc311.png',
+        iconSize: [19, 19],
+    });
+
+    const lat = parseFloat(point.latitude);
+    const lng = parseFloat(point.longitude);
+    const tooltip = `${point.complaint_type} - ${point.status}`;
+    const marker = L.marker([lat, lng], {
+        icon: xicon,
+        zIndexOffset: 1000,
+        feature: point,
+    })
+    .bindTooltip(tooltip);
+
+    marker.on('click', function () {
+        openThreeOneOneMarkerPopup(marker);
+    });
 
     return marker;
 }
 
 
-function makeThreeOneOneMarker (point) {
+function openThreeOneOneMarkerPopup (marker) {
     // for the popup/infowindow, compose a HTML template, then slot in the values
     const $html = $(`
     <table class="table table-sm table-striped mb-0">
@@ -459,6 +494,7 @@ function makeThreeOneOneMarker (point) {
     </table>
     `);
 
+    const point = marker.options.feature;
     for (const [fieldname, value] of Object.entries(point)) {
         let displayvalue = value;
 
@@ -472,24 +508,7 @@ function makeThreeOneOneMarker (point) {
         $html.find(`span[data-slot="${fieldname}"]`).text(displayvalue);
     }
 
-    // the icon for the ThreeOneOne marker
-    const xicon = L.icon({
-        iconUrl: 'nyc311.png',
-        iconSize: [19, 19],
-    });
-
-    // create and return the ThreeOneOne marker
-    const lat = parseFloat(point.latitude);
-    const lng = parseFloat(point.longitude);
-    const tooltip = `${point.complaint_type} - ${point.status}`;
-    const marker = L.marker([lat, lng], {
-        icon: xicon,
-        zIndexOffset: 1000,
-    })
-    .bindTooltip(tooltip)
-    .bindPopup($html.get(0));
-
-    marker.on('click', function () { this.openPopup(); }); // Safari + Leaflet 1.7.1 workaround
-
-    return marker;
+    const htmldiv = $html.get(0);
+    const latlng = marker.getLatLng();
+    MAP.openPopup(htmldiv, latlng);
 }
